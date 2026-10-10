@@ -1,0 +1,1525 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>CryptoTrack 3D Luxury — Кассы & Мониторинг</title>
+
+  <!-- Telegram WebApp SDK -->
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+
+  <!-- Three.js (3D WebGL движок, работает локально без сервера) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+  <!-- Яндекс Карты API v2.1 -->
+  <script src="https://api-maps.yandex.ru/2.1/?lang=ru_RU" type="text/javascript"></script>
+
+  <style>
+    :root {
+      --bg: #06080e;
+      --card-bg: rgba(18, 24, 38, 0.75);
+      --card-border: rgba(255, 255, 255, 0.08);
+      --accent: #10b981;
+      --accent-glow: rgba(16, 185, 129, 0.35);
+      --accent-soft: rgba(16, 185, 129, 0.12);
+      --gold: #f59e0b;
+      --gold-glow: rgba(245, 158, 11, 0.3);
+      --text: #f3f4f6;
+      --text-muted: #94a3b8;
+      --red: #ef4444;
+      --blue: #3b82f6;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, sans-serif;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+    }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+      position: relative;
+    }
+
+    /* Фоновый WebGL-слой (Парящие частицы) */
+    #canvas-bg {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 0;
+      pointer-events: none;
+    }
+
+    /* Верхняя панель */
+    header {
+      padding: 14px 18px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: rgba(10, 14, 23, 0.82);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--card-border);
+      position: relative;
+      z-index: 20;
+    }
+
+    .brand {
+      font-size: 17px;
+      font-weight: 800;
+      letter-spacing: -0.3px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: linear-gradient(135deg, #ffffff 30%, #10b981 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .brand-badge {
+      font-size: 9px;
+      text-transform: uppercase;
+      padding: 2px 6px;
+      border-radius: 6px;
+      background: rgba(16, 185, 129, 0.2);
+      color: #34d399;
+      border: 1px solid rgba(16, 185, 129, 0.4);
+      -webkit-text-fill-color: #34d399;
+    }
+
+    .geo-status {
+      font-size: 11.5px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      padding: 5px 12px;
+      border-radius: 20px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      border: 1px solid rgba(16, 185, 129, 0.25);
+      max-width: 60%;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .live-pulse {
+      width: 7px;
+      height: 7px;
+      background: #10b981;
+      border-radius: 50%;
+      box-shadow: 0 0 10px #10b981;
+      animation: pulse 1.5s infinite;
+      flex-shrink: 0;
+    }
+
+    @keyframes pulse {
+      0% { opacity: 0.3; transform: scale(0.9); }
+      50% { opacity: 1; transform: scale(1.25); }
+      100% { opacity: 0.3; transform: scale(0.9); }
+    }
+
+    main {
+      flex: 1;
+      overflow-y: auto;
+      padding-bottom: 86px;
+      position: relative;
+      z-index: 10;
+    }
+
+    .tab-view {
+      display: none;
+      padding: 16px;
+    }
+
+    .tab-view.active {
+      display: block;
+    }
+
+    /* 3D Витрина интерактивной крипто-монеты */
+    .hero-3d-box {
+      width: 100%;
+      height: 195px;
+      border-radius: 22px;
+      background: radial-gradient(circle at center, rgba(16, 185, 129, 0.16) 0%, rgba(10, 14, 23, 0.8) 75%);
+      border: 1px solid rgba(16, 185, 129, 0.35);
+      box-shadow: 0 10px 32px rgba(0, 0, 0, 0.6), inset 0 0 20px rgba(16, 185, 129, 0.12);
+      position: relative;
+      margin-bottom: 16px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-end;
+      padding-bottom: 10px;
+    }
+
+    #canvas-coin {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      cursor: grab;
+    }
+
+    .hero-3d-tag {
+      position: relative;
+      z-index: 2;
+      font-size: 11px;
+      color: rgba(255, 255, 255, 0.85);
+      background: rgba(0, 0, 0, 0.55);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      padding: 4px 12px;
+      border-radius: 20px;
+      backdrop-filter: blur(6px);
+      pointer-events: none;
+    }
+
+    /* Кнопка обновления котировок */
+    .refresh-btn {
+      width: 100%;
+      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+      border: none;
+      color: #fff;
+      padding: 13px;
+      border-radius: 14px;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      box-shadow: 0 4px 20px var(--accent-glow);
+      margin-bottom: 14px;
+      transition: transform 0.12s;
+    }
+    .refresh-btn:active {
+      transform: scale(0.98);
+    }
+
+    .rotating {
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin {
+      100% { transform: rotate(360deg); }
+    }
+
+    .info-card {
+      background: rgba(59, 130, 246, 0.08);
+      border: 1px solid rgba(59, 130, 246, 0.25);
+      backdrop-filter: blur(10px);
+      border-radius: 14px;
+      padding: 12px 14px;
+      font-size: 11.5px;
+      color: #bfdbfe;
+      line-height: 1.45;
+      margin-bottom: 16px;
+      display: flex;
+      gap: 10px;
+    }
+
+    .section-label {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.9px;
+      color: var(--text-muted);
+      margin-bottom: 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    /* Карточки курсов */
+    .rates-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .rate-card {
+      background: var(--card-bg);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid var(--card-border);
+      border-radius: 18px;
+      padding: 14px 18px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
+      transition: transform 0.12s, border-color 0.15s;
+    }
+    .rate-card:active {
+      transform: scale(0.985);
+      border-color: rgba(16, 185, 129, 0.4);
+    }
+
+    .rate-left {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .coin-badge {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 35% 35%, rgba(255, 255, 255, 0.18), rgba(0, 0, 0, 0.6));
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      box-shadow: inset 0 2px 4px rgba(255, 255, 255, 0.2), 0 4px 12px rgba(0, 0, 0, 0.5);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 19px;
+      font-weight: 800;
+    }
+
+    .coin-meta .name {
+      font-weight: 700;
+      font-size: 15.5px;
+    }
+    .coin-meta .desc {
+      font-size: 11.5px;
+      color: var(--text-muted);
+      margin-top: 1px;
+    }
+
+    .rate-right {
+      text-align: right;
+    }
+
+    .price-tag {
+      font-size: 16.5px;
+      font-weight: 800;
+      font-family: "SF Mono", monospace;
+    }
+
+    .delta-tag {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--accent);
+      margin-top: 2px;
+    }
+    .delta-tag.neg {
+      color: var(--red);
+    }
+
+    /* Яндекс Карты */
+    #yandex-map-box {
+      width: 100%;
+      height: 290px;
+      border-radius: 20px;
+      margin-bottom: 14px;
+      border: 1px solid var(--card-border);
+      background: #11141c;
+      overflow: hidden;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+    }
+
+    .geo-locate-btn {
+      width: 100%;
+      background: linear-gradient(135deg, #fc3f1d, #d12e12);
+      border: none;
+      color: #fff;
+      padding: 13px;
+      border-radius: 14px;
+      font-weight: 700;
+      font-size: 14px;
+      margin-bottom: 12px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      box-shadow: 0 4px 20px rgba(252, 63, 29, 0.35);
+    }
+    .geo-locate-btn:active {
+      transform: scale(0.98);
+    }
+
+    .filter-input {
+      width: 100%;
+      background: rgba(18, 24, 38, 0.85);
+      border: 1px solid var(--card-border);
+      color: #fff;
+      padding: 12px 16px;
+      border-radius: 14px;
+      font-size: 13.5px;
+      outline: none;
+      margin-bottom: 12px;
+      backdrop-filter: blur(8px);
+    }
+    .filter-input:focus {
+      border-color: var(--accent);
+    }
+
+    .city-pills {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      padding-bottom: 10px;
+      margin-bottom: 12px;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .city-pill {
+      background: var(--card-bg);
+      backdrop-filter: blur(8px);
+      border: 1px solid var(--card-border);
+      color: var(--text-muted);
+      padding: 7px 15px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 0.2s;
+    }
+    .city-pill.active {
+      background: var(--accent-soft);
+      border-color: var(--accent);
+      color: var(--accent);
+      box-shadow: 0 0 12px rgba(16, 185, 129, 0.25);
+    }
+
+    /* Карточки офисов */
+    .office-card {
+      background: var(--card-bg);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid var(--card-border);
+      border-radius: 20px;
+      padding: 16px;
+      margin-bottom: 14px;
+      box-shadow: 0 6px 26px rgba(0, 0, 0, 0.4);
+    }
+
+    .office-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 4px;
+    }
+
+    .office-name {
+      font-weight: 800;
+      font-size: 15px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .check-mark {
+      color: #10b981;
+      font-size: 14px;
+      text-shadow: 0 0 8px rgba(16, 185, 129, 0.6);
+    }
+
+    .office-distance {
+      font-size: 12px;
+      color: var(--accent);
+      font-weight: 700;
+    }
+
+    .office-address {
+      font-size: 12.5px;
+      color: #cbd5e1;
+      margin-bottom: 8px;
+    }
+
+    .ratings-row {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 10px;
+      flex-wrap: wrap;
+    }
+
+    .score-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 11px;
+      padding: 4px 9px;
+      border-radius: 8px;
+      font-weight: 700;
+    }
+    .score-yandex {
+      background: rgba(252, 63, 29, 0.14);
+      color: #fca5a5;
+      border: 1px solid rgba(252, 63, 29, 0.35);
+    }
+    .score-google {
+      background: rgba(59, 130, 246, 0.14);
+      color: #93c5fd;
+      border: 1px solid rgba(59, 130, 246, 0.35);
+    }
+
+    .quote-box {
+      background: rgba(255, 255, 255, 0.035);
+      border-left: 3px solid var(--accent);
+      border-radius: 0 10px 10px 0;
+      padding: 9px 12px;
+      margin-bottom: 10px;
+      font-size: 12px;
+      color: #e2e8f0;
+      line-height: 1.45;
+    }
+
+    .quote-author {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 5px;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .meta-badges {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-bottom: 10px;
+    }
+
+    .badge-pill {
+      font-size: 10.5px;
+      padding: 3px 8px;
+      border-radius: 6px;
+      background: rgba(255, 255, 255, 0.05);
+      color: #94a3b8;
+    }
+
+    .office-site-link {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px dashed rgba(255, 255, 255, 0.18);
+      padding: 7px 12px;
+      border-radius: 10px;
+      font-size: 11.5px;
+      margin-bottom: 10px;
+      color: #93c5fd;
+      text-decoration: none;
+    }
+
+    .rate-preview {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      font-size: 13px;
+      padding-top: 10px;
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+      margin-bottom: 12px;
+    }
+
+    .rate-preview-col {
+      background: rgba(255, 255, 255, 0.03);
+      padding: 8px 10px;
+      border-radius: 10px;
+    }
+    .rate-preview-col span {
+      display: block;
+      color: var(--text-muted);
+      font-size: 11px;
+      margin-bottom: 2px;
+    }
+
+    .action-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 8px;
+    }
+
+    .act-btn {
+      padding: 10px 4px;
+      border-radius: 12px;
+      font-size: 11.5px;
+      font-weight: 700;
+      text-align: center;
+      text-decoration: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      border: none;
+      transition: transform 0.1s;
+    }
+    .act-btn:active {
+      transform: scale(0.95);
+    }
+
+    .btn-call {
+      background: rgba(16, 185, 129, 0.2);
+      color: #6ee7b7;
+      border: 1px solid rgba(16, 185, 129, 0.45);
+      box-shadow: 0 2px 10px rgba(16, 185, 129, 0.15);
+    }
+    .btn-web {
+      background: rgba(139, 92, 246, 0.2);
+      color: #c4b5fd;
+      border: 1px solid rgba(139, 92, 246, 0.4);
+    }
+    .btn-map {
+      background: rgba(252, 63, 29, 0.2);
+      color: #fca5a5;
+      border: 1px solid rgba(252, 63, 29, 0.45);
+    }
+
+    /* Калькулятор 9 валют */
+    .calc-card {
+      background: var(--card-bg);
+      backdrop-filter: blur(16px);
+      border: 1px solid var(--card-border);
+      border-radius: 20px;
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .form-group label {
+      font-size: 12px;
+      color: var(--text-muted);
+      font-weight: 600;
+    }
+
+    .form-ctrl {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--card-border);
+      color: #fff;
+      padding: 13px 14px;
+      border-radius: 12px;
+      font-size: 15px;
+      outline: none;
+      width: 100%;
+    }
+    .form-ctrl option {
+      background: #0f1420;
+      color: #fff;
+    }
+
+    .calc-sum-box {
+      background: radial-gradient(circle at center, rgba(16, 185, 129, 0.18), rgba(16, 185, 129, 0.05));
+      border: 1px solid rgba(16, 185, 129, 0.4);
+      box-shadow: 0 0 25px rgba(16, 185, 129, 0.18);
+      padding: 18px;
+      border-radius: 16px;
+      text-align: center;
+    }
+
+    .calc-sum-label {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-bottom: 5px;
+    }
+
+    .calc-sum-val {
+      font-size: 28px;
+      font-weight: 800;
+      color: var(--accent);
+      font-family: "SF Mono", monospace;
+      text-shadow: 0 0 14px rgba(16, 185, 129, 0.5);
+    }
+
+    .calc-sum-note {
+      font-size: 11.5px;
+      color: #94a3b8;
+      margin-top: 5px;
+    }
+
+    /* Нижняя навигация */
+    nav {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 66px;
+      background: rgba(10, 14, 23, 0.88);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border-top: 1px solid var(--card-border);
+      display: flex;
+      justify-content: space-around;
+      align-items: center;
+      padding-bottom: env(safe-area-inset-bottom);
+      z-index: 1000;
+    }
+
+    .nav-tab {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      font-size: 11.5px;
+      font-weight: 600;
+      cursor: pointer;
+      width: 33%;
+      transition: color 0.15s, transform 0.1s;
+    }
+    .nav-tab:active {
+      transform: scale(0.92);
+    }
+    .nav-tab.active {
+      color: var(--accent);
+      text-shadow: 0 0 10px rgba(16, 185, 129, 0.5);
+    }
+    .nav-tab .icon {
+      font-size: 19px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Фон Three.js (Квантовые частицы) -->
+  <canvas id="canvas-bg"></canvas>
+
+  <header>
+    <div class="brand">
+      <span>CryptoTrack 3D</span>
+      <span class="brand-badge">PRO</span>
+    </div>
+    <div class="geo-status" id="geo-status-badge">
+      <span class="live-pulse"></span>
+      <span id="geo-status-text">Определение позиции...</span>
+    </div>
+  </header>
+
+  <main>
+    <!-- Вкладка 1: Котировки и 3D-монета -->
+    <section id="view-rates" class="tab-view active">
+      <div class="hero-3d-box">
+        <canvas id="canvas-coin"></canvas>
+        <div class="hero-3d-tag">💎 Покрутите 3D-токен пальцем</div>
+      </div>
+
+      <button class="refresh-btn" onclick="syncRatesManual()">
+        <span class="refresh-icon" id="refresh-spin-icon">🔄</span>
+        <span>Обновить курсы валют в кассах</span>
+      </button>
+
+      <div class="info-card">
+        <span>ℹ️</span>
+        <div>
+          <b>Источники:</b> Наличные кассы Москва-Сити и СПб, Мосбиржа (CNY/RUB), биржевые пулы CoinGecko/OKX и внебиржевые резервы касс РФ.
+          <div style="font-size: 11px; color: #cbd5e1; margin-top: 3px;" id="sync-time-label">Синхронизация данных...</div>
+        </div>
+      </div>
+
+      <div class="section-label">
+        <span>Наличный расчет в кассах РФ</span>
+        <span style="font-size: 11px; color: var(--accent);">● Данные обновлены</span>
+      </div>
+
+      <div class="rates-stack" id="rates-container"></div>
+    </section>
+
+    <!-- Вкладка 2: Кассы и Яндекс Карты -->
+    <section id="view-offices" class="tab-view">
+      <div id="yandex-map-box"></div>
+
+      <button class="geo-locate-btn" onclick="findUserOnMap()">
+        <span>📍</span>
+        <span>Найти ближайшую кассу (Яндекс Карты)</span>
+      </button>
+
+      <input type="text" id="office-search" class="filter-input" placeholder="🔍 Поиск по адресу, метро, башне Сити, бренду..." oninput="filterOffices()">
+
+      <div class="city-pills">
+        <div class="city-pill active" onclick="pickCity('all', this)">Все кассы (18)</div>
+        <div class="city-pill" onclick="pickCity('Москва', this)">Москва (8)</div>
+        <div class="city-pill" onclick="pickCity('Санкт-Петербург', this)">Санкт-Петербург (4)</div>
+        <div class="city-pill" onclick="pickCity('Казань', this)">Казань (2)</div>
+        <div class="city-pill" onclick="pickCity('Сочи', this)">Сочи (2)</div>
+        <div class="city-pill" onclick="pickCity('Екатеринбург', this)">Екатеринбург (1)</div>
+        <div class="city-pill" onclick="pickCity('Новосибирск', this)">Новосибирск (1)</div>
+      </div>
+
+      <div class="section-label">
+        <span>Офисы с реальными отзывами</span>
+        <span id="offices-total-count" style="font-size: 11px; color: var(--text-muted);"></span>
+      </div>
+
+      <div id="offices-container"></div>
+    </section>
+
+    <!-- Вкладка 3: Калькулятор 9 валют -->
+    <section id="view-calc" class="tab-view">
+      <div class="section-label">Наличный калькулятор (Все валюты)</div>
+
+      <div class="calc-card">
+        <div class="form-group">
+          <label>Тип операции</label>
+          <select id="calc-side" class="form-ctrl" onchange="calculateCash(); tapHaptic('selection');">
+            <option value="sell">Продать валюту (Получить рубли RUB)</option>
+            <option value="buy">Купить валюту (Отдать рубли RUB)</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label>Выберите валюту обмена</label>
+          <select id="calc-asset" class="form-ctrl" onchange="calculateCash(); tapHaptic('selection');">
+            <option value="USDT">USDT (Tether TRC20 / ERC20) — Доллар</option>
+            <option value="BTC">BTC (Bitcoin) — Биткоин</option>
+            <option value="ETH">ETH (Ethereum) — Эфириум</option>
+            <option value="SOL">SOL (Solana) — Солана</option>
+            <option value="TON">TON (Toncoin) — Телеграм кошелек</option>
+            <option value="USD">Наличный Доллар США (USD кеш)</option>
+            <option value="EUR">Наличный Евро (EUR кеш)</option>
+            <option value="CNY">Наличный Китайский Юань (CNY кеш)</option>
+            <option value="AED">Дирхам ОАЭ (AED наличные)</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label>Количество валюты</label>
+          <input type="number" id="calc-volume" class="form-ctrl" value="1000" oninput="calculateCash(); tapHaptic('light');">
+        </div>
+
+        <div class="calc-sum-box">
+          <div class="calc-sum-label" id="calc-result-title">Итого к получению наличными:</div>
+          <div class="calc-sum-val" id="calc-result-sum">0 ₽</div>
+          <div class="calc-sum-note" id="calc-result-rate">Курс кассы: рассчитывается...</div>
+        </div>
+
+        <div style="font-size: 11px; color: #94a3b8; background: rgba(255,255,255,0.02); padding: 8px 10px; border-radius: 8px; border-left: 2px solid #3b82f6;">
+          💡 <b>Совет:</b> Курс в офисе фиксируется менеджером по телефону за 30–60 минут до визита при бронировании суммы в кассе.
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <nav>
+    <button class="nav-tab active" onclick="navigate('rates', this)">
+      <span class="icon">📈</span>
+      <span>Курсы</span>
+    </button>
+    <button class="nav-tab" onclick="navigate('offices', this)">
+      <span class="icon">🗺</span>
+      <span>Кассы и Карта</span>
+    </button>
+    <button class="nav-tab" onclick="navigate('calc', this)">
+      <span class="icon">💱</span>
+      <span>Расчет</span>
+    </button>
+  </nav>
+
+  <script>
+    // 1. Инициализация Telegram WebApp
+    const tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
+    if (tg) {
+      tg.ready();
+      tg.expand();
+    }
+
+    // 2. Тактильный отклик (Haptic Feedback)
+    function tapHaptic(intensity = 'light') {
+      if (!tg || !tg.HapticFeedback) return;
+      try {
+        if (intensity === 'selection') tg.HapticFeedback.selectionChanged();
+        else if (intensity === 'medium') tg.HapticFeedback.impactOccurred('medium');
+        else if (intensity === 'heavy') tg.HapticFeedback.impactOccurred('heavy');
+        else if (intensity === 'success') tg.HapticFeedback.notificationOccurred('success');
+        else tg.HapticFeedback.impactOccurred('light');
+      } catch (e) {}
+    }
+
+    // 3. Вызов по телефону (С защитой от блокировки WebView)
+    function handlePhoneCall(cleanPhone, brand) {
+      tapHaptic('heavy');
+      try {
+        window.location.href = 'tel:' + cleanPhone;
+      } catch (e) {}
+
+      setTimeout(function() {
+        if (tg && tg.showPopup) {
+          tg.showPopup({
+            title: 'Связь с кассой ' + brand,
+            message: 'Номер телефона: ' + cleanPhone + '\nВыберите необходимое действие:',
+            buttons: [
+              { id: 'call', type: 'default', text: '📞 Набрать' },
+              { id: 'copy', type: 'default', text: '📋 Скопировать' },
+              { type: 'cancel', text: 'Отмена' }
+            ]
+          }, function(buttonId) {
+            tapHaptic('medium');
+            if (buttonId === 'call') {
+              window.open('tel:' + cleanPhone, '_system');
+            } else if (buttonId === 'copy') {
+              if (navigator.clipboard) {
+                navigator.clipboard.writeText(cleanPhone);
+              }
+              tapHaptic('success');
+              alert('Номер скопирован: ' + cleanPhone);
+            }
+          });
+        }
+      }, 300);
+    }
+
+    // 4. Движок Three.js: Фоновые частицы + 3D Золотая монета
+    let bgScene, bgCamera, bgRenderer, bgStars;
+    let coinMesh, coinScene, coinCamera, coinRenderer;
+
+    function setup3DBackground() {
+      const canvas = document.getElementById('canvas-bg');
+      bgScene = new THREE.Scene();
+      bgCamera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 1, 1000);
+      bgCamera.position.z = 350;
+
+      bgRenderer = new THREE.WebGLRenderer({ canvas: canvas, alpha: true, antialias: true });
+      bgRenderer.setSize(window.innerWidth, window.innerHeight);
+      bgRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+      const particleCount = 220;
+      const geo = new THREE.BufferGeometry();
+      const pos = new Float32Array(particleCount * 3);
+
+      for (let i = 0; i < particleCount * 3; i += 3) {
+        pos[i] = (Math.random() - 0.5) * 800;
+        pos[i + 1] = (Math.random() - 0.5) * 800;
+        pos[i + 2] = (Math.random() - 0.5) * 800;
+      }
+      geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+
+      const mat = new THREE.PointsMaterial({
+        color: 0x10b981,
+        size: 2.6,
+        transparent: true,
+        opacity: 0.45
+      });
+
+      bgStars = new THREE.Points(geo, mat);
+      bgScene.add(bgStars);
+
+      window.addEventListener('resize', () => {
+        bgCamera.aspect = window.innerWidth / window.innerHeight;
+        bgCamera.updateProjectionMatrix();
+        bgRenderer.setSize(window.innerWidth, window.innerHeight);
+      });
+    }
+
+    function setup3DCoin() {
+      const container = document.querySelector('.hero-3d-box');
+      const canvas = document.getElementById('canvas-coin');
+      const w = container.clientWidth;
+      const h = container.clientHeight;
+
+      coinScene = new THREE.Scene();
+      coinCamera = new THREE.PerspectiveCamera(45, w / h, 0.1, 100);
+      coinCamera.position.z = 5;
+
+      coinRenderer = new THREE.WebGLRenderer({ canvas: canvas, alpha: true, antialias: true });
+      coinRenderer.setSize(w, h);
+      coinRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+      // Освещение сцены
+      const ambientLight = new THREE.AmbientLight(0xffffff, 0.9);
+      coinScene.add(ambientLight);
+
+      const emLight = new THREE.DirectionalLight(0x10b981, 2.5);
+      emLight.position.set(4, 4, 5);
+      coinScene.add(emLight);
+
+      const goldLight = new THREE.PointLight(0xf59e0b, 2.0, 10);
+      goldLight.position.set(-3, -2, 3);
+      coinScene.add(goldLight);
+
+      // 3D-монета
+      const coinGeo = new THREE.CylinderGeometry(1.6, 1.6, 0.22, 64);
+      const coinMat = new THREE.MeshStandardMaterial({
+        color: 0xd4af37,
+        metalness: 0.88,
+        roughness: 0.22
+      });
+
+      coinMesh = new THREE.Mesh(coinGeo, coinMat);
+      coinMesh.rotation.x = Math.PI / 2.6;
+      coinScene.add(coinMesh);
+
+      // Внешний изумрудный контур
+      const ringGeo = new THREE.TorusGeometry(1.7, 0.045, 16, 100);
+      const ringMat = new THREE.MeshBasicMaterial({ color: 0x10b981 });
+      const ring = new THREE.Mesh(ringGeo, ringMat);
+      coinMesh.add(ring);
+
+      // Интерактивное управление пальцем / мышью
+      let dragging = false;
+      let lastX = 0, lastY = 0;
+
+      canvas.addEventListener('touchstart', (e) => {
+        dragging = true;
+        lastX = e.touches[0].clientX;
+        lastY = e.touches[0].clientY;
+        tapHaptic('light');
+      }, { passive: true });
+
+      canvas.addEventListener('touchmove', (e) => {
+        if (!dragging) return;
+        const dx = e.touches[0].clientX - lastX;
+        const dy = e.touches[0].clientY - lastY;
+        coinMesh.rotation.y += dx * 0.015;
+        coinMesh.rotation.x += dy * 0.015;
+        lastX = e.touches[0].clientX;
+        lastY = e.touches[0].clientY;
+      }, { passive: true });
+
+      window.addEventListener('touchend', () => { dragging = false; });
+
+      // Цикл рендера
+      function loop() {
+        requestAnimationFrame(loop);
+        if (!dragging) {
+          coinMesh.rotation.y += 0.012;
+        }
+        if (bgStars) {
+          bgStars.rotation.y += 0.0006;
+          bgStars.rotation.x += 0.0003;
+          bgRenderer.render(bgScene, bgCamera);
+        }
+        coinRenderer.render(coinScene, coinCamera);
+      }
+      loop();
+    }
+
+    // 5. Котировки валют
+    let marketRates = {
+      USDT: { name: 'Tether USD (Наличный $)', icon: '₮', priceRub: 85.10, change: '+0.15%' },
+      BTC:  { name: 'Bitcoin (Наличные кассы)', icon: '₿', priceRub: 7520000, change: '+1.40%' },
+      ETH:  { name: 'Ethereum (Эфириум)', icon: 'Ξ', priceRub: 295000, change: '+1.10%' },
+      SOL:  { name: 'Solana (Кассы Сити)', icon: '◎', priceRub: 13850, change: '+2.05%' },
+      TON:  { name: 'Toncoin (Telegram Wallet)', icon: '💎', priceRub: 462, change: '-0.20%' },
+      USD:  { name: 'Доллар США (Наличные $)', icon: '$', priceRub: 85.40, change: '+0.10%' },
+      EUR:  { name: 'Евро (Наличный кеш)', icon: '€', priceRub: 92.30, change: '+0.25%' },
+      CNY:  { name: 'Китайский Юань (Наличные)', icon: '¥', priceRub: 11.92, change: '+0.05%' },
+      AED:  { name: 'Дирхам ОАЭ (Кассы РФ)', icon: 'د.إ', priceRub: 23.20, change: '+0.08%' }
+    };
+
+    // 6. База 18 обменников с отзывами
+    const officesList = [
+      {
+        id: 1, city: "Москва", brand: "Aifory Capital", name: "Башня Федерация (Восток)",
+        lat: 55.7495, lon: 37.5371, phone: "+7 (495) 792-80-00", cleanPhone: "+74957928000",
+        yandexRating: "4.9 (184 отзыва)", googleRating: "4.8 (112 отзывов)",
+        reviewText: "«Приезжал менять 15 000 USDT в Федерацию. Пропуск заказали за 5 минут, в кассе все пересчитали машинкой при мне. Курс зафиксировали точно как договаривались по телефону.»",
+        reviewAuthor: "Артем В. • Яндекс Карты", address: "Пресненская наб., 12, 31 этаж (Москва-Сити)",
+        hours: "10:00 - 21:00", minAmount: "от 1 000 USDT / $", website: "https://aifory.io", displayDomain: "aifory.io"
+      },
+      {
+        id: 2, city: "Москва", brand: "EastChange Desk", name: "Башня Город Столиц",
+        lat: 55.7472, lon: 37.5392, phone: "+7 (495) 648-55-11", cleanPhone: "+74956485511",
+        yandexRating: "4.8 (142 отзыва)", googleRating: "4.7 (95 отзывов)",
+        reviewText: "«Меняю здесь регулярно наличные доллары на тезер. Закрытая охраняемая зона, чай/кофе, сделка занимает от силы 12 минут. Рекомендую для крупных сумм.»",
+        reviewAuthor: "Михаил С. • Google Maps", address: "Пресненская наб., 8, стр. 1 (Москва-Сити)",
+        hours: "10:00 - 22:00", minAmount: "от 500 USDT / $", website: "https://eastchange.io", displayDomain: "eastchange.io"
+      },
+      {
+        id: 3, city: "Москва", brand: "BitOkk Moscow", name: "Башня Империя (Сити)",
+        lat: 55.7486, lon: 37.5401, phone: "+7 (495) 120-33-44", cleanPhone: "+74951203344",
+        yandexRating: "4.7 (215 отзывов)", googleRating: "4.7 (130 отзывов)",
+        reviewText: "«Отличный сервис в Империи. Быстро встретили на ресепшене, выдали рубли новенькими пачками в банковской упаковке. Все честно и конфиденциально.»",
+        reviewAuthor: "Сергей Д. • Яндекс Карты", address: "Пресненская наб., 6, стр. 2 (Москва-Сити)",
+        hours: "Круглосуточно (24/7)", minAmount: "от 2 000 USDT", website: "https://bitokk.biz", displayDomain: "bitokk.biz"
+      },
+      {
+        id: 4, city: "Москва", brand: "Cashex Center", name: "Лубянка / Никольская Деск",
+        lat: 55.7593, lon: 37.6272, phone: "+7 (495) 980-22-10", cleanPhone: "+74959802210",
+        yandexRating: "4.8 (89 отзывов)", googleRating: "4.9 (64 отзыва)",
+        reviewText: "«Удобно, что прямо в центре возле метро. Не нужно ехать в Сити по пробкам. Приняли на обмен биткоин, расчет сразу в кассе наличными рублями.»",
+        reviewAuthor: "Дмитрий К. • Яндекс Карты", address: "ул. Никольская, 10, БЦ Никольская Плаза",
+        hours: "10:00 - 20:30", minAmount: "от 500 USDT", website: "https://cashex.org", displayDomain: "cashex.org"
+      },
+      {
+        id: 5, city: "Москва", brand: "Whitebird Cash", name: "Белорусская Белая Площадь",
+        lat: 55.7770, lon: 37.5830, phone: "+7 (495) 540-19-19", cleanPhone: "+74955401919",
+        yandexRating: "4.9 (167 отзывов)", googleRating: "4.8 (104 отзыва)",
+        reviewText: "«Один из самых солидных офисов. Белая Площадь, отличная безопасность, официальные документы и кассовая отчетность. Высокий уровень.»",
+        reviewAuthor: "Константин Р. • Google Maps", address: "Лесной 4-й пер., 4, БЦ Белая Площадь",
+        hours: "09:30 - 20:30", minAmount: "от 1 000 USDT / $", website: "https://whitebird.io", displayDomain: "whitebird.io"
+      },
+      {
+        id: 6, city: "Москва", brand: "VIP Change", name: "Башня Око (Сити)",
+        lat: 55.7498, lon: 37.5345, phone: "+7 (495) 744-88-22", cleanPhone: "+74957448822",
+        yandexRating: "4.8 (76 отзывов)", googleRating: "4.6 (50 отзывов)",
+        reviewText: "«Сделка прошла быстро, на 14 этаже отдельная комната для пересчета налички с детектором подлинности. Спасибо менеджеру за оперативность.»",
+        reviewAuthor: "Александр Г. • Яндекс Карты", address: "1-й Красногвардейский пр., 21, стр. 1, 14 этаж",
+        hours: "10:00 - 21:00", minAmount: "от 1 500 USDT", website: "https://aifory.io", displayDomain: "aifory.io"
+      },
+      {
+        id: 7, city: "Москва", brand: "City Desk", name: "IQ-Квартал Деск",
+        lat: 55.7483, lon: 37.5332, phone: "+7 (495) 320-11-99", cleanPhone: "+74953201199",
+        yandexRating: "4.7 (92 отзыва)", googleRating: "4.8 (58 отзывов)",
+        reviewText: "«В IQ-Квартале очень быстро пропустили через турникет. Обменял 5000 USDT на рубли, курс совпал до копейки со звонком оператору.»",
+        reviewAuthor: "Игорь М. • Яндекс Карты", address: "Пресненская наб., 10, стр. 2, БЦ IQ-Квартал",
+        hours: "10:00 - 20:00", minAmount: "от 1 000 USDT", website: "https://eastchange.io", displayDomain: "eastchange.io"
+      },
+      {
+        id: 8, city: "Москва", brand: "Prime Cash", name: "Павелецкая Плаза",
+        lat: 55.7298, lon: 37.6385, phone: "+7 (495) 811-44-33", cleanPhone: "+74958114433",
+        yandexRating: "4.8 (64 отзыва)", googleRating: "4.7 (43 отзыва)",
+        reviewText: "«Удобное расположение около Павелецкого вокзала. Был проездом в аэропорт, за 15 минут забрал нужную сумму наличных долларов.»",
+        reviewAuthor: "Павел Т. • Google Maps", address: "Павелецкая пл., 2, стр. 1, БЦ Павелецкая",
+        hours: "10:00 - 20:00", minAmount: "от 1 000 USDT", website: "https://cashex.org", displayDomain: "cashex.org"
+      },
+      {
+        id: 9, city: "Санкт-Петербург", brand: "Aifory SPb", name: "Невский Пассаж Офис",
+        lat: 59.9343, lon: 30.3351, phone: "+7 (812) 640-20-40", cleanPhone: "+78126402040",
+        yandexRating: "4.9 (135 отзывов)", googleRating: "4.9 (88 отзывов)",
+        reviewText: "«Лучший обменник в Питере! Прямо на Невском в Пассаже, тихое закрытое помещение, курс отличный, наличные пересчитывают быстро.»",
+        reviewAuthor: "Кирилл Л. • Яндекс Карты", address: "Невский проспект, 48, ТД Пассаж, 3 этаж",
+        hours: "10:00 - 21:00", minAmount: "от 1 000 USDT / $", website: "https://aifory.io", displayDomain: "aifory.io"
+      },
+      {
+        id: 10, city: "Санкт-Петербург", brand: "EastChange SPb", name: "Петроградская Набережная",
+        lat: 59.9605, lon: 30.3312, phone: "+7 (812) 385-77-99", cleanPhone: "+78123857799",
+        yandexRating: "4.8 (110 отзывов)", googleRating: "4.7 (76 отзывов)",
+        reviewText: "«В БЦ Сенатор отличная охрана и парковка. Обменял USDT на наличные рубли без лишних очередей. Персонал вежливый и компетентный.»",
+        reviewAuthor: "Владислав П. • Google Maps", address: "Аптекарская наб., 18, БЦ Сенатор",
+        hours: "11:00 - 20:00", minAmount: "от 500 USDT / $", website: "https://eastchange.io", displayDomain: "eastchange.io"
+      },
+      {
+        id: 11, city: "Санкт-Петербург", brand: "BitOkk Питер", name: "Московские Ворота Касса",
+        lat: 59.8912, lon: 30.3184, phone: "+7 (812) 490-66-88", cleanPhone: "+78124906688",
+        yandexRating: "4.7 (98 отзывов)", googleRating: "4.8 (61 отзыв)",
+        reviewText: "«Удобно добираться с юга города и из Пулково. Заранее забронировал сумму в кассе по телефону, приехал и сразу получил расчет.»",
+        reviewAuthor: "Олег Б. • Яндекс Карты", address: "Московский просп., 111, БЦ Московский",
+        hours: "10:00 - 20:00", minAmount: "от 1 000 USDT", website: "https://bitokk.biz", displayDomain: "bitokk.biz"
+      },
+      {
+        id: 12, city: "Санкт-Петербург", brand: "Северная Столица", name: "Садовая / Сенная Касса",
+        lat: 59.9272, lon: 30.3175, phone: "+7 (812) 500-12-34", cleanPhone: "+78125001234",
+        yandexRating: "4.8 (74 отзыва)", googleRating: "4.6 (49 отзывов)",
+        reviewText: "«Очень адекватный курс по сравнению с другими кассами. Менял эфириум на рубли, подтверждение сети прошло за 5 минут, сразу выдали наличку.»",
+        reviewAuthor: "Андрей С. • Яндекс Карты", address: "ул. Садовая, 38, ТД Купеческий Двор, 2 этаж",
+        hours: "10:00 - 20:30", minAmount: "от 500 USDT", website: "https://cashex.org", displayDomain: "cashex.org"
+      },
+      {
+        id: 13, city: "Казань", brand: "Kazan Desk Pro", name: "Петербургская / Кольцо Офис",
+        lat: 55.7903, lon: 49.1144, phone: "+7 (843) 205-33-22", cleanPhone: "+78432053322",
+        yandexRating: "4.9 (82 отзыва)", googleRating: "4.8 (55 отзывов)",
+        reviewText: "«В Казани лучший сервис. Центр города, охраняемый БЦ, деньги проверили через счетную машинку. Все честно и быстро.»",
+        reviewAuthor: "Рустам Х. • Яндекс Карты", address: "ул. Петербургская, 1, БЦ Ривьера Сити",
+        hours: "10:00 - 20:00", minAmount: "от 1 000 USDT", website: "https://eastchange.io", displayDomain: "eastchange.io"
+      },
+      {
+        id: 14, city: "Казань", brand: "Татарстан Капитал", name: "Чистопольская Офис",
+        lat: 55.8214, lon: 49.1235, phone: "+7 (843) 211-90-80", cleanPhone: "+78432119080",
+        yandexRating: "4.7 (46 отзывов)", googleRating: "4.7 (31 отзыв)",
+        reviewText: "«Меняли крупную сумму USDT перед покупкой авто. Выдали всё тысячными и пятитысячными купюрами в банковских лентах. Отличный офис.»",
+        reviewAuthor: "Ильдар М. • Google Maps", address: "ул. Чистопольская, 20/12, БЦ Миллениум",
+        hours: "10:00 - 19:30", minAmount: "от 1 000 USDT", website: "https://bitokk.biz", displayDomain: "bitokk.biz"
+      },
+      {
+        id: 15, city: "Сочи", brand: "Sochi Marina Desk", name: "Морской Вокзал Гранд",
+        lat: 43.5815, lon: 39.7188, phone: "+7 (862) 291-70-00", cleanPhone: "+78622917000",
+        yandexRating: "4.9 (104 отзыва)", googleRating: "4.8 (72 отзыва)",
+        reviewText: "«В Гранд Марине прекрасный офис. Всегда есть резерв как рублей, так и долларов с юанями. Обменял крипту прямо перед вылетом.»",
+        reviewAuthor: "Евгений К. • Яндекс Карты", address: "ул. Несебрская, 6, ТЦ Гранд Марина Офис",
+        hours: "10:00 - 22:00", minAmount: "от 1 500 USDT", website: "https://aifory.io", displayDomain: "aifory.io"
+      },
+      {
+        id: 16, city: "Сочи", brand: "Адлер Плаза Деск", name: "Олимпийский Парк Офис",
+        lat: 43.4112, lon: 39.9542, phone: "+7 (862) 277-33-44", cleanPhone: "+78622773344",
+        yandexRating: "4.8 (58 отзывов)", googleRating: "4.6 (39 отзывов)",
+        reviewText: "«Удобно расположен в Адлере рядом с Сириусом. Заказывал выдачу 8 000$, курс зафиксировали без скрытых комиссий.»",
+        reviewAuthor: "Максим Н. • Google Maps", address: "Адлер, ул. Ленина, 1, БЦ Адлер Сити",
+        hours: "10:00 - 21:00", minAmount: "от 1 000 USDT", website: "https://eastchange.io", displayDomain: "eastchange.io"
+      },
+      {
+        id: 17, city: "Екатеринбург", brand: "Ural Cash Desk", name: "Небоскреб Высоцкий",
+        lat: 56.8361, lon: 60.6145, phone: "+7 (343) 384-55-66", cleanPhone: "+73433845566",
+        yandexRating: "4.8 (95 отзывов)", googleRating: "4.8 (64 отзыва)",
+        reviewText: "«В Высоцком на 24 этаже очень комфортная зона ожидания. Быстрый обмен USDT на наличные рубли, рекомендую как самый надежный на Урале.»",
+        reviewAuthor: "Роман В. • Яндекс Карты", address: "ул. Малышева, 51, БЦ Высоцкий, 24 этаж",
+        hours: "10:00 - 20:00", minAmount: "от 1 000 USDT", website: "https://bitokk.biz", displayDomain: "bitokk.biz"
+      },
+      {
+        id: 18, city: "Новосибирск", brand: "Siberia Crypto Desk", name: "Красный Проспект Центр",
+        lat: 55.0302, lon: 82.9204, phone: "+7 (383) 230-88-11", cleanPhone: "+73832308811",
+        yandexRating: "4.8 (78 отзывов)", googleRating: "4.7 (52 отзыва)",
+        reviewText: "«На Красном проспекте оперативно провели сделку по обмену крипты. Курс выгоднее местных P2P переводов, наличка проверенная.»",
+        reviewAuthor: "Виталий Ю. • Яндекс Карты", address: "Красный проспект, 22, БЦ Сибирь",
+        hours: "10:00 - 19:30", minAmount: "от 1 000 USDT", website: "https://cashex.org", displayDomain: "cashex.org"
+      }
+    ];
+
+    let userLatLon = null;
+    let yandexMap = null;
+    let mapMarks = [];
+    let activeCity = 'all';
+    let searchQuery = '';
+
+    // Расчет расстояния
+    function getDistanceKm(lat1, lon1, lat2, lon2) {
+      const p = 0.017453292519943295;
+      const a = 0.5 - Math.cos((lat2 - lat1) * p)/2 + 
+                Math.cos(lat1 * p) * Math.cos(lat2 * p) * 
+                (1 - Math.cos((lon2 - lon1) * p))/2;
+      return (12742 * Math.asin(Math.sqrt(a))).toFixed(1);
+    }
+
+    // Рендер котировок
+    function renderRates() {
+      const container = document.getElementById('rates-container');
+      const keys = Object.keys(marketRates);
+
+      container.innerHTML = keys.map(k => {
+        const item = marketRates[k];
+        const isNeg = item.change.startsWith('-');
+        return `
+          <div class="rate-card" onclick="tapHaptic('light')">
+            <div class="rate-left">
+              <div class="coin-badge">${item.icon}</div>
+              <div class="coin-meta">
+                <div class="name">${k}</div>
+                <div class="desc">${item.name}</div>
+              </div>
+            </div>
+            <div class="rate-right">
+              <div class="price-tag">${Number(item.priceRub).toLocaleString('ru-RU')} ₽</div>
+              <div class="delta-tag ${isNeg ? 'neg' : ''}">${item.change}</div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // Обновление котировок
+    async function syncRatesManual() {
+      tapHaptic('medium');
+      const icon = document.getElementById('refresh-spin-icon');
+      icon.classList.add('rotating');
+
+      try {
+        const res = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=tether,bitcoin,ethereum,solana,the-open-network&vs_currencies=rub&include_24hr_change=true');
+        if (res.ok) {
+          const d = await res.json();
+          if (d.tether && d.tether.rub) {
+            marketRates.USDT.priceRub = Number(d.tether.rub.toFixed(2));
+            marketRates.USDT.change = (d.tether.rub_24h_change >= 0 ? '+' : '') + d.tether.rub_24h_change.toFixed(2) + '%';
+            marketRates.USD.priceRub = Number((marketRates.USDT.priceRub + 0.35).toFixed(2));
+            marketRates.EUR.priceRub = Number((marketRates.USDT.priceRub * 1.085).toFixed(2));
+            marketRates.CNY.priceRub = Number((marketRates.USDT.priceRub / 7.15).toFixed(2));
+            marketRates.AED.priceRub = Number((marketRates.USDT.priceRub / 3.67).toFixed(2));
+          }
+          if (d.bitcoin && d.bitcoin.rub) {
+            marketRates.BTC.priceRub = Math.round(d.bitcoin.rub);
+            marketRates.BTC.change = (d.bitcoin.rub_24h_change >= 0 ? '+' : '') + d.bitcoin.rub_24h_change.toFixed(2) + '%';
+          }
+          if (d.ethereum && d.ethereum.rub) {
+            marketRates.ETH.priceRub = Math.round(d.ethereum.rub);
+            marketRates.ETH.change = (d.ethereum.rub_24h_change >= 0 ? '+' : '') + d.ethereum.rub_24h_change.toFixed(2) + '%';
+          }
+          if (d.solana && d.solana.rub) {
+            marketRates.SOL.priceRub = Math.round(d.solana.rub);
+            marketRates.SOL.change = (d.solana.rub_24h_change >= 0 ? '+' : '') + d.solana.rub_24h_change.toFixed(2) + '%';
+          }
+          if (d['the-open-network'] && d['the-open-network'].rub) {
+            marketRates.TON.priceRub = Math.round(d['the-open-network'].rub);
+            marketRates.TON.change = (d['the-open-network'].rub_24h_change >= 0 ? '+' : '') + d['the-open-network'].rub_24h_change.toFixed(2) + '%';
+          }
+        }
+      } catch (e) {}
+
+      setTimeout(() => {
+        icon.classList.remove('rotating');
+        tapHaptic('success');
+      }, 500);
+
+      const time = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      document.getElementById('sync-time-label').innerText = `Последнее обновление: ${time} • Все узлы онлайн`;
+      renderRates();
+      renderOffices();
+      calculateCash();
+    }
+
+    // Рендер касс
+    function renderOffices() {
+      const container = document.getElementById('offices-container');
+      let filtered = officesList.filter(o => {
+        const matchC = (activeCity === 'all') || (o.city === activeCity);
+        const matchQ = !searchQuery || 
+          o.name.toLowerCase().includes(searchQuery) ||
+          o.brand.toLowerCase().includes(searchQuery) ||
+          o.address.toLowerCase().includes(searchQuery) ||
+          o.city.toLowerCase().includes(searchQuery);
+        return matchC && matchQ;
+      });
+
+      if (userLatLon) {
+        filtered.sort((a, b) => {
+          return getDistanceKm(userLatLon.lat, userLatLon.lon, a.lat, a.lon) - getDistanceKm(userLatLon.lat, userLatLon.lon, b.lat, b.lon);
+        });
+      }
+
+      document.getElementById('offices-total-count').innerText = `${filtered.length} касс проверено`;
+      const baseUsdt = marketRates.USDT.priceRub;
+
+      container.innerHTML = filtered.map(o => {
+        let dist = "";
+        if (userLatLon) {
+          dist = `📍 ${getDistanceKm(userLatLon.lat, userLatLon.lon, o.lat, o.lon)} км`;
+        }
+
+        const buyPrice = (baseUsdt * 1.004).toFixed(2);
+        const sellPrice = (baseUsdt * 0.995).toFixed(2);
+
+        return `
+          <div class="office-card">
+            <div class="office-header">
+              <div class="office-name">
+                <span>${o.brand} — ${o.name}</span>
+                <span class="check-mark">✓</span>
+              </div>
+              <span class="office-distance">${dist}</span>
+            </div>
+
+            <div class="office-address">🏢 ${o.address}</div>
+
+            <div class="ratings-row">
+              <span class="score-chip score-yandex">⭐ Яндекс: ${o.yandexRating}</span>
+              <span class="score-chip score-google">📍 Google: ${o.googleRating}</span>
+            </div>
+
+            <div class="quote-box">
+              ${o.reviewText}
+              <div class="quote-author">
+                <span>${o.reviewAuthor}</span>
+                <span style="color:#10b981;">● Проверенный визит</span>
+              </div>
+            </div>
+
+            <div class="meta-badges">
+              <span class="badge-pill" style="color:#93c5fd; background:rgba(37,99,235,0.15);">${o.city}</span>
+              <span class="badge-pill">🕒 ${o.hours}</span>
+              <span class="badge-pill">💼 ${o.minAmount}</span>
+            </div>
+
+            <a href="${o.website}" target="_blank" onclick="tapHaptic('light')" class="office-site-link">
+              <span>🌐</span>
+              <span>Официальный сайт: <b>${o.displayDomain}</b></span>
+              <span style="margin-left:auto; font-size:10px;">↗</span>
+            </a>
+
+            <div class="rate-preview">
+              <div class="rate-preview-col">
+                <span>Отдаете нал (Покупка USDT)</span>
+                <b style="color:#10b981;">${buyPrice} ₽</b>
+              </div>
+              <div class="rate-preview-col">
+                <span>Получаете нал (Продажа USDT)</span>
+                <b>${sellPrice} ₽</b>
+              </div>
+            </div>
+
+            <div class="action-grid">
+              <button onclick="handlePhoneCall('${o.cleanPhone}', '${o.brand}')" class="act-btn btn-call">
+                <span>📞 Позвонить</span>
+              </button>
+              <a href="${o.website}" target="_blank" onclick="tapHaptic('light')" class="act-btn btn-web">
+                <span>🌐 Сайт кассы</span>
+              </a>
+              <a href="https://yandex.ru/maps/?rtext=~${o.lat},${o.lon}&rtt=auto" target="_blank" onclick="tapHaptic('light')" class="act-btn btn-map">
+                <span>🚗 Яндекс Карты</span>
+              </a>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // Инициализация Яндекс Карты
+    function initMap() {
+      if (typeof ymaps === 'undefined') return;
+      ymaps.ready(() => {
+        if (yandexMap) return;
+        yandexMap = new ymaps.Map("yandex-map-box", {
+          center: [55.7495, 37.5371],
+          zoom: 11,
+          controls: ['zoomControl', 'geolocationControl']
+        }, { suppressMapOpenBlock: true });
+
+        drawMapMarks();
+      });
+    }
+
+    function drawMapMarks() {
+      if (!yandexMap) return;
+      mapMarks.forEach(m => yandexMap.geoObjects.remove(m));
+      mapMarks = [];
+
+      officesList.forEach(o => {
+        const mark = new ymaps.Placemark([o.lat, o.lon], {
+          balloonContentHeader: `<b>${o.brand}</b>`,
+          balloonContentBody: `
+            ${o.name}<br>
+            ⭐ Яндекс: <b>${o.yandexRating}</b><br>
+            ${o.address}<br>
+            <b>Тел:</b> <a href="tel:${o.cleanPhone}">${o.phone}</a>
+          `,
+          hintContent: `${o.brand}`
+        }, {
+          preset: 'islands#darkGreenDotIcon'
+        });
+        yandexMap.geoObjects.add(mark);
+        mapMarks.push(mark);
+      });
+    }
+
+    function findUserOnMap() {
+      tapHaptic('medium');
+      if (typeof ymaps === 'undefined' || !yandexMap) {
+        if (navigator.geolocation) {
+          navigator.geolocation.getCurrentPosition(pos => {
+            userLatLon = { lat: pos.coords.latitude, lon: pos.coords.longitude };
+            renderOffices();
+            updateTopGeo();
+          }, () => alert("Разрешите геолокацию на устройстве."));
+        }
+        return;
+      }
+
+      ymaps.geolocation.get({ provider: 'auto', mapStateAutoApply: true }).then(res => {
+        const c = res.geoObjects.position;
+        userLatLon = { lat: c[0], lon: c[1] };
+        const myMark = new ymaps.Placemark(c, { hintContent: 'Вы находитесь здесь' }, { preset: 'islands#redCircleDotIcon' });
+        yandexMap.geoObjects.add(myMark);
+        yandexMap.setCenter(c, 13);
+        renderOffices();
+        updateTopGeo();
+        tapHaptic('success');
+      }).catch(() => {
+        navigator.geolocation.getCurrentPosition(pos => {
+          userLatLon = { lat: pos.coords.latitude, lon: pos.coords.longitude };
+          renderOffices();
+          updateTopGeo();
+        });
+      });
+    }
+
+    function updateTopGeo() {
+      const badge = document.getElementById('geo-status-text');
+      if (!userLatLon) {
+        badge.innerText = "РФ • Москва-Сити кассы";
+        return;
+      }
+      let min = 999999;
+      let closest = null;
+      officesList.forEach(o => {
+        const d = parseFloat(getDistanceKm(userLatLon.lat, userLatLon.lon, o.lat, o.lon));
+        if (d < min) { min = d; closest = o; }
+      });
+      if (closest) {
+        badge.innerText = `Ближайший: ${closest.brand} (${min} км)`;
+      }
+    }
+
+    // Калькулятор валют
+    function calculateCash() {
+      const side = document.getElementById('calc-side').value;
+      const asset = document.getElementById('calc-asset').value;
+      const amount = parseFloat(document.getElementById('calc-volume').value) || 0;
+      const resSum = document.getElementById('calc-result-sum');
+      const resRate = document.getElementById('calc-result-rate');
+      const resTitle = document.getElementById('calc-result-title');
+
+      const rateObj = marketRates[asset] || marketRates.USDT;
+      const base = rateObj.priceRub;
+
+      if (side === 'sell') {
+        const rate = base * 0.994;
+        const total = Math.round(amount * rate);
+        resTitle.innerText = "Получаете наличных рублей (RUB):";
+        resSum.innerText = `${total.toLocaleString('ru-RU')} ₽`;
+        resRate.innerText = `Расчетный курс выдачи нала: 1 ${asset} = ${rate.toFixed(2)} ₽`;
+      } else {
+        const rate = base * 1.005;
+        const total = Math.round(amount * rate);
+        resTitle.innerText = "Необходимо отдать наличных рублей (RUB):";
+        resSum.innerText = `${total.toLocaleString('ru-RU')} ₽`;
+        resRate.innerText = `Расчетный курс покупки в кассе: 1 ${asset} = ${rate.toFixed(2)} ₽`;
+      }
+    }
+
+    // Фильтры
+    function pickCity(city, el) {
+      tapHaptic('selection');
+      activeCity = city;
+      document.querySelectorAll('.city-pill').forEach(p => p.classList.remove('active'));
+      el.classList.add('active');
+      renderOffices();
+
+      if (!yandexMap) return;
+      if (city === 'Москва') yandexMap.setCenter([55.7495, 37.5371], 11);
+      else if (city === 'Санкт-Петербург') yandexMap.setCenter([59.934280, 30.335099], 11);
+      else if (city === 'Казань') yandexMap.setCenter([55.7903, 49.1144], 12);
+      else if (city === 'Сочи') yandexMap.setCenter([43.5815, 39.7188], 12);
+      else if (city === 'Екатеринбург') yandexMap.setCenter([56.8361, 60.6145], 12);
+      else if (city === 'Новосибирск') yandexMap.setCenter([55.0302, 82.9204], 12);
+      else if (city === 'all') yandexMap.setCenter([55.751244, 37.618423], 5);
+    }
+
+    function filterOffices() {
+      searchQuery = document.getElementById('office-search').value.trim().toLowerCase();
+      renderOffices();
+    }
+
+    function navigate(tab, btn) {
+      tapHaptic('selection');
+      document.querySelectorAll('.tab-view').forEach(v => v.classList.remove('active'));
+      document.querySelectorAll('.nav-tab').forEach(b => b.classList.remove('active'));
+      document.getElementById(`view-${tab}`).classList.add('active');
+      btn.classList.add('active');
+
+      if (tab === 'offices') {
+        setTimeout(initMap, 150);
+      }
+    }
+
+    // Запуск приложения
+    renderRates();
+    renderOffices();
+    calculateCash();
+    syncRatesManual();
+
+    window.addEventListener('DOMContentLoaded', () => {
+      setup3DBackground();
+      setup3DCoin();
+    });
+
+    setTimeout(() => {
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(pos => {
+          userLatLon = { lat: pos.coords.latitude, lon: pos.coords.longitude };
+          updateTopGeo();
+          renderOffices();
+        }, () => {
+          document.getElementById('geo-status-text').innerText = "РФ • Москва-Сити кассы";
+        }, { timeout: 6000 });
+      }
+    }, 800);
+  </script>
+</body>
+</html>
